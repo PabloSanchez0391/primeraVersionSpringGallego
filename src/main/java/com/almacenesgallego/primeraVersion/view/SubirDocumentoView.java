@@ -7,17 +7,18 @@ import com.almacenesgallego.primeraVersion.model.ReferenciaProveedor;
 import com.almacenesgallego.primeraVersion.repository.ProductoRepository;
 import com.almacenesgallego.primeraVersion.repository.ProveedorRepository;
 import com.almacenesgallego.primeraVersion.repository.ReferenciaProveedorRepository;
-import com.almacenesgallego.primeraVersion.service.AlbaranService;
 import com.almacenesgallego.primeraVersion.wrapper.ProductoAlbaranEditable;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.vaadin.flow.component.button.Button;
+import com.vaadin.flow.component.button.ButtonVariant;
+import com.vaadin.flow.component.combobox.ComboBox;
 import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.grid.editor.Editor;
-import com.vaadin.flow.component.html.Anchor;
 import com.vaadin.flow.component.html.H3;
 import com.vaadin.flow.component.notification.Notification;
+import com.vaadin.flow.component.orderedlayout.FlexComponent;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.textfield.TextField;
@@ -26,8 +27,9 @@ import com.vaadin.flow.component.upload.receivers.MemoryBuffer;
 import com.vaadin.flow.data.binder.Binder;
 import com.vaadin.flow.router.Route;
 import com.vaadin.flow.component.dialog.Dialog;
-import com.vaadin.flow.component.textfield.TextField;
-import com.vaadin.flow.component.formlayout.FormLayout;
+import jakarta.annotation.PostConstruct;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
 
 import java.io.InputStream;
 import java.math.BigDecimal;
@@ -41,42 +43,150 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
-@Route("subir-documento")
+@Route(value = "subir-documento", layout = MainView.class)
+@RequiredArgsConstructor
 public class SubirDocumentoView extends VerticalLayout {
 
     private final Grid<ProductoAlbaranEditable> grid = new Grid<>(ProductoAlbaranEditable.class, false);
-    private final AlbaranService albaranService;
-    private final ProveedorRepository proveedorRepository;
-    private final ProductoRepository productoRepository;
+//    private final AlbaranService albaranService;
+//    private final ProveedorRepository proveedorRepository;
+//    private final ProductoRepository productoRepository;
     private final ReferenciaProveedorRepository referenciaProveedorRepository;
+    private Proveedor proveedorSeleccionado;
+    private final H3 proveedorActualLabel = new H3("📦 Proveedor actual: (ninguno)");
+    private Button addButton, guardarBtn;
+    private HorizontalLayout accionesGridLayout;
 
 
-    public SubirDocumentoView(AlbaranService albaranService,
-                              ProveedorRepository proveedorRepository,
-                              ProductoRepository productoRepository,
-                              ReferenciaProveedorRepository referenciaProveedorRepository) {
-        this.albaranService = albaranService;
-        this.proveedorRepository = proveedorRepository;
-        this.productoRepository = productoRepository;
-        this.referenciaProveedorRepository = referenciaProveedorRepository;
-
+    @PostConstruct
+    private void init() {
+        // Título
         add(new H3("Subir documento PDF para análisis"));
+
+        configurarBotonesYDialog();
+
+        // Configurar grid
+        configurarGrid();
+
+        // Agregar componentes a la UI
+        add(grid);
+    }
+
+    private void configurarBotonesYDialog() {
+        proveedorActualLabel.getStyle().set("color", "#1e88e5");
+        proveedorActualLabel.getStyle().set("font-weight", "bold");
+        proveedorActualLabel.getStyle().set("margin-bottom", "0.5em");
+
+        // === Diálogo de subida ===
+        Dialog uploadDialog = new Dialog();
+        uploadDialog.setHeaderTitle("Subir documento PDF para análisis");
+        uploadDialog.setWidth("500px");
 
         MemoryBuffer buffer = new MemoryBuffer();
         Upload upload = new Upload(buffer);
         upload.setAcceptedFileTypes("application/pdf");
+        upload.setWidthFull();
 
-        Button procesarBtn = new Button("Subir y analizar", e -> procesarPDF(buffer));
+        ComboBox<Proveedor> proveedorCombo = new ComboBox<>("Seleccionar proveedor");
+        proveedorCombo.setItemLabelGenerator(Proveedor::getNombre);
+        proveedorCombo.setPlaceholder("Selecciona un proveedor...");
+//        proveedorCombo.setItems(proveedorRepository.findAll());
+        List<Proveedor> proveedores = obtenerProveedoresRemoto();
+        proveedorCombo.setItems(proveedores);
+        proveedorCombo.setWidthFull();
+        proveedorCombo.addValueChangeListener(e -> proveedorSeleccionado = e.getValue());
 
-        configurarGrid(); // ✅ Limpieza visual
+        Button analizarBtn = new Button("📄 Analizar PDF", e -> {
+            if (proveedorSeleccionado == null) {
+                Notification.show("Selecciona un proveedor antes de analizar el documento");
+                return;
+            }
+            proveedorActualLabel.setText("📦 Proveedor actual: " + proveedorSeleccionado.getNombre());
+            uploadDialog.close();
+            procesarPDF(buffer);
+        });
+        analizarBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
 
-        Anchor volver = new Anchor("/", "Volver a la tabla");
-        add(upload, procesarBtn, grid, volver);
+        Button cancelarBtn = new Button("Cancelar", e -> uploadDialog.close());
+        HorizontalLayout accionesDialogo = new HorizontalLayout(analizarBtn, cancelarBtn);
+        accionesDialogo.setWidthFull();
+        accionesDialogo.setJustifyContentMode(JustifyContentMode.END);
+
+        VerticalLayout contenidoDialogo = new VerticalLayout(proveedorCombo, upload, accionesDialogo);
+        contenidoDialogo.setSpacing(true);
+        contenidoDialogo.setAlignItems(Alignment.STRETCH);
+        uploadDialog.add(contenidoDialogo);
+
+        // === Botón principal (abre el diálogo) ===
+        Button subirAnalizarBtn = new Button("Subir y analizar", e -> uploadDialog.open());
+        subirAnalizarBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+
+        // === Crear botones de acción (inicialmente ocultos) ===
+        addButton = new Button("➕ Añadir producto", e -> {
+            List<ProductoAlbaranEditable> items = new ArrayList<>(grid.getListDataView().getItems().toList());
+            ProductoAlbaranEditable nuevo = new ProductoAlbaranEditable();
+            nuevo.setCodigo("Nuevo");
+            nuevo.setDescripcion("");
+            nuevo.setCantidad(BigDecimal.ZERO);
+            nuevo.setFechaCaducidad(LocalDate.now());
+            nuevo.setNumeroLote("");
+            items.add(nuevo);
+            grid.setItems(items);
+        });
+
+        guardarBtn = new Button("💾 Guardar en base de datos", e -> {
+            if (proveedorSeleccionado == null) {
+                Notification.show("Selecciona un proveedor antes de guardar");
+                return;
+            }
+
+            List<ProductoAlbaranEditable> productos = new ArrayList<>(grid.getListDataView().getItems().toList());
+
+            try {
+                List<ProductoAlbaranEditable> noReconocidos = productos.stream()
+                        .filter(pa -> referenciaProveedorRepository
+                                .findByProveedorAndCodigoProveedor(proveedorSeleccionado, pa.getCodigo())
+                                .isEmpty())
+                        .toList();
+
+                if (noReconocidos.isEmpty()) {
+//                    albaranService.guardarAlbaran(productos, proveedorSeleccionado);
+                    guardarAlbaranRemoto(productos, proveedorSeleccionado.getId());
+
+                    Notification.show("Productos guardados correctamente en la base de datos");
+                } else {
+                    procesarNoReconocidos(noReconocidos, 0, productos);
+                }
+
+            } catch (Exception ex) {
+                Notification.show("Error guardando en base de datos: " + ex.getMessage());
+                ex.printStackTrace();
+            }
+        });
+
+        // Inicialmente ocultos
+        addButton.setVisible(false);
+        guardarBtn.setVisible(false);
+
+        // === Layout que contendrá los botones debajo del grid ===
+        accionesGridLayout = new HorizontalLayout(addButton, guardarBtn);
+        accionesGridLayout.setSpacing(true);
+        accionesGridLayout.setVisible(false);
+
+        // === Barra superior con el botón principal ===
+        HorizontalLayout barraSuperior = new HorizontalLayout(subirAnalizarBtn);
+        barraSuperior.setSpacing(true);
+        barraSuperior.setAlignItems(Alignment.CENTER);
+        barraSuperior.getStyle().set("margin-bottom", "1em");
+
+        add(proveedorActualLabel, barraSuperior, accionesGridLayout);
     }
 
+    /**
+     * Procesa el PDF subido y muestra los botones cuando haya resultados.
+     */
     private void procesarPDF(MemoryBuffer buffer) {
         try (InputStream inputStream = buffer.getInputStream()) {
             if (inputStream == null) {
@@ -91,7 +201,7 @@ public class SubirDocumentoView extends VerticalLayout {
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create("http://localhost:8080/api/pdf/upload"))
                     .header("Content-Type", "multipart/form-data; boundary=boundary123")
-                    .POST(ofFileMultipart(tempFile, "file", "application/pdf"))
+                    .POST(ofFileMultipart(tempFile, "file", "application/pdf", String.valueOf(proveedorSeleccionado.getId())))
                     .build();
 
             HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
@@ -109,6 +219,11 @@ public class SubirDocumentoView extends VerticalLayout {
                     .collect(Collectors.toList());
 
             grid.setItems(productosEditables);
+
+            // === Mostrar botones debajo del grid ===
+            addButton.setVisible(true);
+            guardarBtn.setVisible(true);
+            accionesGridLayout.setVisible(true);
 
             Notification.show("Documento analizado con éxito: " + productos.size() + " productos detectados");
         } catch (Exception ex) {
@@ -166,12 +281,6 @@ public class SubirDocumentoView extends VerticalLayout {
             return new HorizontalLayout(editar, eliminar);
         }).setHeader("Acciones");
 
-        // === Guardar o cancelar edición ===
-        Button saveButton = new Button("Guardar", e -> editor.save());
-        Button cancelButton = new Button("Cancelar", e -> editor.cancel());
-        HorizontalLayout botonesEdicion = new HorizontalLayout(saveButton, cancelButton);
-        add(botonesEdicion);
-
         // Doble clic para editar
         grid.addItemDoubleClickListener(event -> {
             editor.editItem(event.getItem());
@@ -186,46 +295,6 @@ public class SubirDocumentoView extends VerticalLayout {
 
         grid.setWidthFull();
         grid.setAllRowsVisible(true);
-
-        // === Botón para añadir una nueva fila ===
-        Button addButton = new Button("➕ Añadir producto", e -> {
-            List<ProductoAlbaranEditable> items = new ArrayList<>(grid.getListDataView().getItems().toList());
-            ProductoAlbaranEditable nuevo = new ProductoAlbaranEditable();
-            nuevo.setCodigo("Nuevo");
-            nuevo.setDescripcion("");
-            nuevo.setCantidad(BigDecimal.ZERO);
-            nuevo.setFechaCaducidad(LocalDate.now());
-            nuevo.setNumeroLote("");
-            items.add(nuevo);
-            grid.setItems(items);
-        });
-
-        add(addButton);
-
-        Button guardarBtn = new Button("💾 Guardar en base de datos", e -> {
-            List<ProductoAlbaranEditable> productos = new ArrayList<>(grid.getListDataView().getItems().toList());
-
-            try {
-                Proveedor proveedor = proveedorRepository.findById(1)
-                        .orElseThrow(() -> new RuntimeException("Proveedor con id=1 no encontrado"));
-
-                List<ProductoAlbaranEditable> noReconocidos = productos.stream()
-                        .filter(pa -> referenciaProveedorRepository.findByProveedorAndCodigoProveedor(proveedor, pa.getCodigo()).isEmpty())
-                        .toList();
-
-                if (noReconocidos.isEmpty()) {
-                    albaranService.guardarAlbaran(productos);
-                    Notification.show("Productos guardados correctamente en la base de datos");
-                } else {
-                    procesarNoReconocidos(noReconocidos, 0, productos, proveedor);
-                }
-
-            } catch (Exception ex) {
-                Notification.show("Error guardando en base de datos: " + ex.getMessage());
-                ex.printStackTrace();
-            }
-        });
-        add(guardarBtn);
     }
 
     /** Elimina un producto del grid */
@@ -235,9 +304,10 @@ public class SubirDocumentoView extends VerticalLayout {
         grid.setItems(items);
     }
 
-    private void mostrarDialogoNuevoProducto(ProductoAlbaranEditable pa, Runnable onGuardado) {
+    private void mostrarDialogoNuevaRelacion(ProductoAlbaranEditable pa, Runnable onGuardado) {
         Dialog dialog = new Dialog();
         dialog.setHeaderTitle("Vincular nuevo producto");
+        dialog.setWidth("800px");
 
         // Campos de información
         TextField codigoProveedorField = new TextField("Código proveedor");
@@ -248,78 +318,101 @@ public class SubirDocumentoView extends VerticalLayout {
         descripcionField.setValue(pa.getDescripcion());
         descripcionField.setReadOnly(true);
 
-        TextField codigoInternoField = new TextField("Código interno del producto");
-        codigoInternoField.setPlaceholder("Ej: PRD001");
+        // ComboBox para seleccionar producto
+        ComboBox<Producto> productoCombo = new ComboBox<>("Selecciona producto de la empresa");
+        productoCombo.setItemLabelGenerator(p -> p.getId() + " - " + p.getNombre());
+        productoCombo.setWidthFull();
+        productoCombo.setAllowCustomValue(false); // No permitir valores libres
+
+//        List<Producto> todosProductos = productoRepository.findAll();
+        List<Producto> todosProductos = obtenerProductosRemoto();
+        productoCombo.setItems(todosProductos); // Va a filtrar automáticamente por el label mientras escribes
 
         // Botones
         Button guardarBtn = new Button("Guardar", e -> {
-            String codigoInterno = codigoInternoField.getValue().trim();
-            if (codigoInterno.isEmpty()) {
-                Notification.show("Introduce un código interno válido");
+            Producto productoSeleccionado = productoCombo.getValue();
+            if (productoSeleccionado == null) {
+                Notification.show("Selecciona un producto válido");
                 return;
             }
 
-            Optional<Producto> productoOpt = productoRepository.findById(codigoInterno);
-            if (productoOpt.isEmpty()) {
-                Notification.show("No existe un producto con ese código interno");
+            if (proveedorSeleccionado == null) {
+                Notification.show("Selecciona un proveedor antes de crear la relación");
                 return;
             }
-
-            Proveedor proveedor = proveedorRepository.findById(1)
-                    .orElseThrow(() -> new RuntimeException("Proveedor con id=1 no encontrado"));
 
             // Crear la nueva relación
             ReferenciaProveedor ref = ReferenciaProveedor.builder()
-                    .proveedor(proveedor)
-                    .producto(productoOpt.get())
+                    .proveedor(proveedorSeleccionado)
+                    .producto(productoSeleccionado)
                     .codigoProveedor(pa.getCodigo())
                     .build();
 
-            referenciaProveedorRepository.save(ref);
-
-            Notification.show("Relación creada correctamente");
-
-            dialog.close();
-
-            if (onGuardado != null) {
-                onGuardado.run();
-            }
-
+            guardarReferenciaProveedorRemoto(ref, () -> {
+                dialog.close();
+                if (onGuardado != null) {
+                    onGuardado.run();
+                }
+            });
         });
 
         Button cancelarBtn = new Button("Cancelar", e -> dialog.close());
 
         HorizontalLayout botones = new HorizontalLayout(guardarBtn, cancelarBtn);
+        botones.setWidthFull();
+        botones.setJustifyContentMode(JustifyContentMode.END);
+
+        dialog.setWidth("90%");
+        dialog.setMaxWidth("600px");
+        dialog.setHeight("auto");
+        dialog.setMaxHeight("80%");
+        dialog.setCloseOnEsc(true);
+        dialog.setCloseOnOutsideClick(true);
+
         VerticalLayout contenido = new VerticalLayout(
                 codigoProveedorField,
                 descripcionField,
-                codigoInternoField,
+                productoCombo,
                 botones
         );
-        contenido.setPadding(false);
-        dialog.add(contenido);
+        contenido.setWidthFull();
+        contenido.setPadding(true);
+        contenido.setSpacing(true);
+        contenido.setAlignItems(FlexComponent.Alignment.STRETCH);
 
+        dialog.add(contenido);
         dialog.open();
     }
 
-    private void procesarNoReconocidos(List<ProductoAlbaranEditable> lista, int index, List<ProductoAlbaranEditable> todos, Proveedor proveedor) {
+    private void procesarNoReconocidos(List<ProductoAlbaranEditable> lista, int index, List<ProductoAlbaranEditable> todos) {
         if (index >= lista.size()) {
-            // Todos los no reconocidos procesados → guardar todo
-            albaranService.guardarAlbaran(todos);
-            Notification.show("Productos guardados correctamente en la base de datos");
+            try {
+                guardarAlbaranRemoto(todos, proveedorSeleccionado.getId());
+                Notification.show("Productos guardados correctamente en la base de datos");
+            } catch (Exception ex) {
+                Notification.show("Error guardando en base de datos: " + ex.getMessage());
+                ex.printStackTrace();
+            }
             return;
         }
 
+
         ProductoAlbaranEditable pa = lista.get(index);
-        mostrarDialogoNuevoProducto(pa, () -> procesarNoReconocidos(lista, index + 1, todos, proveedor));
+        mostrarDialogoNuevaRelacion(pa, () -> procesarNoReconocidos(lista, index + 1, todos));
     }
 
-
-    private static HttpRequest.BodyPublisher ofFileMultipart(Path filePath, String paramName, String mimeType) throws Exception {
+    private static HttpRequest.BodyPublisher ofFileMultipart(Path filePath, String paramName, String mimeType, String proveedorId) throws Exception {
         String boundary = "boundary123";
         String CRLF = "\r\n";
 
         StringBuilder sb = new StringBuilder();
+
+        // Campo del proveedor
+        sb.append("--").append(boundary).append(CRLF);
+        sb.append("Content-Disposition: form-data; name=\"proveedorId\"").append(CRLF);
+        sb.append(CRLF).append(proveedorId).append(CRLF);
+
+        // Campo del archivo
         sb.append("--").append(boundary).append(CRLF);
         sb.append("Content-Disposition: form-data; name=\"").append(paramName)
                 .append("\"; filename=\"").append(filePath.getFileName()).append("\"").append(CRLF);
@@ -334,4 +427,101 @@ public class SubirDocumentoView extends VerticalLayout {
                 closing.getBytes()
         ));
     }
+
+    private void guardarAlbaranRemoto(List<ProductoAlbaranEditable> productos, Integer proveedorId) throws Exception {
+        ObjectMapper mapper = new ObjectMapper()
+                .registerModule(new JavaTimeModule())
+                .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+
+        String json = mapper.writeValueAsString(productos);
+
+        HttpClient client = HttpClient.newHttpClient();
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create("http://localhost:8080/api/albaranes/" + proveedorId))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(json))
+                .build();
+
+        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+
+        if (response.statusCode() != 200) {
+            throw new RuntimeException("Error guardando albarán: " + response.body());
+        }
+    }
+
+    private void guardarReferenciaProveedorRemoto(ReferenciaProveedor ref, Runnable onSuccess) {
+        try {
+            ObjectMapper mapper = new ObjectMapper();
+            String json = mapper.writeValueAsString(ref);
+
+            HttpClient client = HttpClient.newHttpClient();
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create("http://localhost:8080/api/referencias-proveedor"))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(json))
+                    .build();
+
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+
+            if (response.statusCode() == 200) {
+                Notification.show("Relación creada correctamente");
+                if (onSuccess != null) onSuccess.run();
+            } else {
+                Notification.show("Error creando relación: " + response.body());
+            }
+
+        } catch (Exception ex) {
+            Notification.show("Error en la conexión con el servidor: " + ex.getMessage());
+            ex.printStackTrace();
+        }
+    }
+
+    private List<Proveedor> obtenerProveedoresRemoto() {
+        try {
+            HttpClient client = HttpClient.newHttpClient();
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create("http://localhost:8080/api/proveedores"))
+                    .GET()
+                    .build();
+
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+
+            if (response.statusCode() == 200) {
+                ObjectMapper mapper = new ObjectMapper();
+                return Arrays.asList(mapper.readValue(response.body(), Proveedor[].class));
+            } else {
+                Notification.show("Error al cargar proveedores: " + response.body());
+            }
+        } catch (Exception ex) {
+            Notification.show("Error conectando con el servidor: " + ex.getMessage());
+            ex.printStackTrace();
+        }
+        return List.of(); // Devuelve lista vacía si falla
+    }
+
+    private List<Producto> obtenerProductosRemoto() {
+        try {
+            HttpClient client = HttpClient.newHttpClient();
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create("http://localhost:8080/api/productos"))
+                    .GET()
+                    .build();
+
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+
+            if (response.statusCode() == 200) {
+                ObjectMapper mapper = new ObjectMapper();
+                return Arrays.asList(mapper.readValue(response.body(), Producto[].class));
+            } else {
+                Notification.show("Error al cargar productos: " + response.body());
+            }
+
+        } catch (Exception ex) {
+            Notification.show("Error conectando con el servidor: " + ex.getMessage());
+            ex.printStackTrace();
+        }
+
+        return List.of(); // Devuelve lista vacía si falla
+    }
+
 }

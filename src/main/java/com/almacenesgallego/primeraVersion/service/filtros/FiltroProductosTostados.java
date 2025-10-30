@@ -1,12 +1,8 @@
-package com.almacenesgallego.primeraVersion.service;
+package com.almacenesgallego.primeraVersion.service.filtros;
 
 import com.almacenesgallego.primeraVersion.model.ProductoAlbaran;
 
-import java.io.File;
-import java.io.IOException;
 import java.math.BigDecimal;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
@@ -14,9 +10,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 
-public class FiltroProductos {
+public class FiltroProductosTostados implements FiltroProductos{
 
     private static final Pattern FECHA_PATTERN =
             Pattern.compile("Fecha\\s*Caducidad\\s*(\\d{2}/\\d{2}/\\d{4})", Pattern.CASE_INSENSITIVE);
@@ -24,9 +19,11 @@ public class FiltroProductos {
     private static final Pattern CANTIDAD_PATTERN = Pattern.compile("\\b\\d{1,3},\\d{2}\\b");
 
     // Lista global de todos los productos (todas las páginas)
-    private static final List<ProductoAlbaran> TODOS_LOS_PRODUCTOS = new ArrayList<>();
+//    private static final List<ProductoAlbaran> TODOS_LOS_PRODUCTOS = new ArrayList<>();
 
-    public static String filtrarProductos(String texto) {
+    @Override
+    public List<ProductoAlbaran> filtrarProductos(String texto) {
+//    public String filtrarProductos(String texto) {
         List<String> lines = texto.lines().toList();
 
         int startIndex = 0;
@@ -132,12 +129,14 @@ public class FiltroProductos {
         }
 
         // Añadir a la lista global
-        TODOS_LOS_PRODUCTOS.addAll(productos);
+//        TODOS_LOS_PRODUCTOS.addAll(productos);
 
 //        System.out.println("Productos detectados en " + entrada.getName() + ": " + TODOS_LOS_PRODUCTOS.size());
-        System.out.println("Productos detectados en texto OCR: " + TODOS_LOS_PRODUCTOS.size());
+//        System.out.println("Productos detectados en texto OCR: " + TODOS_LOS_PRODUCTOS.size());
+        System.out.println("Productos detectados en texto OCR: " + productos.size());
 
-        return generarTxtProductos(productos);
+        return productos;
+//        return generarTxtProductos(productos);
     }
 
     private static String cleanDescripcion(String raw) {
@@ -231,11 +230,11 @@ public class FiltroProductos {
         }
     }
 
-    public static List<ProductoAlbaran> getTodosLosProductos() {
-        return TODOS_LOS_PRODUCTOS;
-    }
-
-    public static void limpiarProductos() {
-        TODOS_LOS_PRODUCTOS.clear();
-    }
+//    public static List<ProductoAlbaran> getTodosLosProductos() {
+//        return TODOS_LOS_PRODUCTOS;
+//    }
+//
+//    public static void limpiarProductos() {
+//        TODOS_LOS_PRODUCTOS.clear();
+//    }
 }

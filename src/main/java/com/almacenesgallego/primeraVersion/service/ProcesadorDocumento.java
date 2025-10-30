@@ -1,11 +1,14 @@
 package com.almacenesgallego.primeraVersion.service;
 
+import com.almacenesgallego.primeraVersion.service.filtros.FiltroProductos;
+import com.almacenesgallego.primeraVersion.service.filtros.FiltroProductosFactory;
+import com.almacenesgallego.primeraVersion.service.filtros.FiltroProductosPeñaSanta;
+import com.almacenesgallego.primeraVersion.service.filtros.FiltroProductosTostados;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectWriter;
 import com.almacenesgallego.primeraVersion.model.ProductoAlbaran;
-import jakarta.annotation.PostConstruct;
+import lombok.RequiredArgsConstructor;
 import net.sourceforge.tess4j.ITesseract;
-import net.sourceforge.tess4j.Tesseract;
 import net.sourceforge.tess4j.TesseractException;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.rendering.PDFRenderer;
@@ -15,29 +18,32 @@ import org.springframework.stereotype.Service;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
+@RequiredArgsConstructor
 public class ProcesadorDocumento {
 
     private final ITesseract tesseract;
     private final ObjectMapper mapper;
+    private final FiltroProductosFactory filtroProductosFactory;
 
     @Value("${tesseract.dpi:300}")
     private int dpi;
 
-    public ProcesadorDocumento(ITesseract tesseract, ObjectMapper mapper) {
-        this.tesseract = tesseract;
-        this.mapper = mapper;
-    }
+    public List<ProductoAlbaran> procesar(File archivoPDF, Long proveedorId) {
 
-    public List<ProductoAlbaran> procesar(File archivoPDF) {
-        List<ProductoAlbaran> todosPro = null;
-        FiltroProductos.limpiarProductos();
+        List<ProductoAlbaran> todosPro = new ArrayList<>();;
+//        FiltroProductosTostados.limpiarProductos();
+//        FiltroProductosPeñaSanta.limpiarProductos();
+        FiltroProductos filtro = filtroProductosFactory.getFiltro(proveedorId);
+
         try (PDDocument document = PDDocument.load(archivoPDF)) {
             PDFRenderer pdfRenderer = new PDFRenderer(document);
 
@@ -49,17 +55,23 @@ public class ProcesadorDocumento {
                 String textoPagina = tesseract.doOCR(image);
 
                 // 2️⃣ Filtrar directamente en memoria
-                String textoFiltrado = FiltroProductos.filtrarProductos(textoPagina);
+//                String textoFiltrado = filtro.filtrarProductos(textoPagina);
+                List<ProductoAlbaran> productosPagina = filtro.filtrarProductos(textoPagina);
 
                 // 3️⃣ Guardar ambos (si realmente los necesitas)
+//                String textoFiltrado = generarTxtProductos(productosPagina);
 //                guardarResultado(generarNombreSalida(archivoPDF, page + 1, false), textoPagina);
 //                guardarResultado(generarNombreSalida(archivoPDF, page + 1, true), textoFiltrado);
+
+                todosPro.addAll(productosPagina);
             }
 
-            todosPro = FiltroProductos.getTodosLosProductos();
+//            todosPro = FiltroProductosTostados.getTodosLosProductos();
+//            todosPro = FiltroProductosPeñaSanta.getTodosLosProductos();
 
-//            File jsonFinal = new File(generarNombreJSON(archivoPDF));
-//            guardarJSON(jsonFinal, todosPro);
+
+            File jsonFinal = new File(generarNombreJSON(archivoPDF));
+            guardarJSON(jsonFinal, todosPro);
 
         } catch (IOException | TesseractException e) {
             e.printStackTrace();
@@ -95,5 +107,51 @@ public class ProcesadorDocumento {
         ObjectWriter writer = mapper.writerWithDefaultPrettyPrinter();
         writer.writeValue(salidaJson, productos);
         System.out.println("JSON global guardado en: " + salidaJson.getAbsolutePath());
+    }
+
+    /**
+     * Genera un String único con todos los productos listados
+     */
+    private static String generarTxtProductos(List<ProductoAlbaran> productos) {
+        DateTimeFormatter df = DateTimeFormatter.ofPattern("dd-MM-yyyy");
+        StringBuilder out = new StringBuilder();
+
+        for (int i = 0; i < productos.size(); i++) {
+            ProductoAlbaran p = productos.get(i);
+
+            out.append(p.codigo() == null ? "" : p.codigo())
+                    .append(" | ")
+                    .append(p.descripcion() == null ? "" : p.descripcion());
+
+            if (p.cantidad() != null) {
+                out.append(" ").append(formatCantidad(p.cantidad()));
+            }
+
+            if (p.fechaCaducidad() != null) {
+                out.append(" Fecha Caducidad ").append(p.fechaCaducidad().format(df));
+            }
+
+            if (p.numeroLote() != null && !p.numeroLote().isBlank()) {
+                out.append(" Lote ").append(p.numeroLote());
+            }
+
+            if (i < productos.size() - 1) out.append("\n");
+        }
+
+        return out.toString();
+    }
+
+    private static String formatCantidad(BigDecimal cantidad) {
+        try {
+            BigDecimal cleaned = cantidad.stripTrailingZeros();
+            int scale = cleaned.scale();
+            if (scale <= 0) {
+                return cleaned.toBigInteger().toString();
+            } else {
+                return cleaned.toPlainString();
+            }
+        } catch (ArithmeticException ex) {
+            return cantidad.toPlainString();
+        }
     }
 }
