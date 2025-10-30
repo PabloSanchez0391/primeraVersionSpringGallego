@@ -1,5 +1,6 @@
 package com.almacenesgallego.primeraVersion.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
 import java.util.List;
@@ -20,6 +21,7 @@ public class Proveedor {
     private String nombre;
 
     @OneToMany(mappedBy = "proveedor", cascade = CascadeType.ALL)
+    @JsonIgnore
     private List<ReferenciaProveedor> referencias;
 }
 
