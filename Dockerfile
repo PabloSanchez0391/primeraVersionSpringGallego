@@ -1,38 +1,34 @@
-# ============================================
-# Etapa 1: Build (compilación del proyecto)
-# ============================================
-FROM maven:3.9.6-eclipse-temurin-17 AS build
+# === Etapa 1: build ===
+FROM maven:3.9.9-eclipse-temurin-17 AS builder
 
-# Directorio de trabajo
 WORKDIR /app
 
-# Copiamos el POM primero para aprovechar caché de dependencias
+# Copiar solo pom.xml primero para cachear dependencias
 COPY pom.xml .
-RUN mvn dependency:go-offline -B
+RUN mvn -B dependency:go-offline
 
-# Copiamos el resto del proyecto
-COPY . .
+# Copiar el resto del código fuente
+COPY src ./src
 
-# Compilamos el proyecto, incluyendo el frontend de Vaadin
-RUN mvn clean package -DskipTests
+# Compilar en modo producción y omitir tests
+RUN mvn clean package -Pproduction -DskipTests
 
-# ============================================
-# Etapa 2: Runtime (ejecución de la app)
-# ============================================
-FROM eclipse-temurin:17-jdk
+# === Etapa 2: runtime ===
+FROM eclipse-temurin:17-jdk-jammy
 
-# Directorio de trabajo
 WORKDIR /app
 
-# Copiamos solo el jar generado desde la etapa anterior
-COPY --from=build /app/target/*.jar app.jar
+# Copiar el JAR compilado desde la etapa builder
+COPY --from=builder /app/target/*.jar app.jar
 
-# Exponemos el puerto (Railway usará la variable PORT)
+# Copiar los datos de Tesseract a una ruta accesible
+COPY src/main/resources/tessdata /app/tessdata
+
+# Exponer el puerto de la aplicación
 EXPOSE 8080
 
-# Variable de entorno de Spring Boot
-ENV JAVA_OPTS="-Xms256m -Xmx512m"
-ENV PORT=8080
+# Perfil de Spring activo
+ENV SPRING_PROFILES_ACTIVE=prod
 
-# Comando de ejecución
-ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar --server.port=${PORT}"]
+# ENTRYPOINT flexible para pasar opciones de Java
+ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]
