@@ -9,6 +9,9 @@ import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.router.Route;
 import com.vaadin.flow.component.orderedlayout.FlexComponent.Alignment;
+import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
+import com.vaadin.flow.server.VaadinSession;
+import com.vaadin.flow.server.WebBrowser;
 
 @Route("")
 public class MainView extends AppLayout {
@@ -34,28 +37,38 @@ public class MainView extends AppLayout {
                 .set("font-size", "var(--lumo-font-size-m)")
                 .set("color", "#34495e");
 
-        VerticalLayout header = new VerticalLayout(title, subtitle);
-        header.setPadding(true);
-        header.setSpacing(false);
-        header.setDefaultHorizontalComponentAlignment(Alignment.START);
+        // 📦 VerticalLayout para colocar título y subtítulo uno debajo del otro
+        VerticalLayout titleLayout = new VerticalLayout(title, subtitle);
+        titleLayout.setPadding(false);
+        titleLayout.setSpacing(false);
+        titleLayout.setAlignItems(Alignment.START);
 
-        addToNavbar(header);
+        // 📏 HorizontalLayout para que el header sea una barra completa
+        HorizontalLayout header = new HorizontalLayout(titleLayout);
+        header.setAlignItems(Alignment.CENTER);
+        header.setWidthFull();
+        header.setPadding(true);
+        header.setSpacing(true);
+        header.getStyle()
+                .set("background-color", "#ecf0f1")
+                .set("box-shadow", "0 2px 4px rgba(0, 0, 0, 0.1)");
+
+        // ✅ El `true` mantiene el botón hamburguesa visible en móvil
+        addToNavbar(true, header);
     }
 
+
     private void createMenu() {
-        // Botones de navegación
         Button stockButton = new Button("Stock", e -> getUI().ifPresent(ui -> ui.navigate(StockLoteView.class)));
         Button subirDocButton = new Button("Subir Documento", e -> getUI().ifPresent(ui -> ui.navigate(SubirDocumentoView.class)));
         Button productosButton = new Button("Productos", e -> getUI().ifPresent(ui -> ui.navigate(ProductoView.class)));
         Button proveedorButton = new Button("Proveedores", e -> getUI().ifPresent(ui -> ui.navigate(ProveedorView.class)));
 
-        // Estilo de los botones
         stockButton.getStyle().set("width", "100%").set("margin-bottom", "10px");
         subirDocButton.getStyle().set("width", "100%");
         productosButton.getStyle().set("width", "100%");
         proveedorButton.getStyle().set("width", "100%");
 
-        // Layout del menú lateral
         VerticalLayout menu = new VerticalLayout(stockButton, subirDocButton, productosButton, proveedorButton);
         menu.setPadding(true);
         menu.setSpacing(true);
@@ -63,7 +76,19 @@ public class MainView extends AppLayout {
         menu.getStyle()
                 .set("background-color", "#ecf0f1")
                 .set("height", "100%")
-                .set("border-radius", "5px");
+                .set("border-radius", "0 5px 5px 0");
+
+        // 💡 Cerrar el drawer solo en móvil
+        WebBrowser browser = VaadinSession.getCurrent().getBrowser();
+        boolean isMobile = browser.isAndroid() || browser.isIPhone();
+
+        if (isMobile) {
+            menu.getChildren().forEach(component -> {
+                if (component instanceof Button button) {
+                    button.addClickListener(e -> setDrawerOpened(false));
+                }
+            });
+        }
 
         addToDrawer(menu);
     }
@@ -84,7 +109,6 @@ public class MainView extends AppLayout {
         setContent(contentArea);
     }
 
-    // Método para actualizar el contenido dinámicamente desde otras vistas
     public void setMainContent(VerticalLayout newContent) {
         contentArea.removeAll();
         contentArea.add(newContent);
