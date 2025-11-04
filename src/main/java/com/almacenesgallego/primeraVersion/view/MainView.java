@@ -1,6 +1,7 @@
 package com.almacenesgallego.primeraVersion.view;
 
 import com.vaadin.flow.component.applayout.AppLayout;
+import com.vaadin.flow.component.applayout.AppLayout.Section;
 import com.vaadin.flow.component.html.H1;
 import com.vaadin.flow.component.html.H3;
 import com.vaadin.flow.component.html.Span;
@@ -17,14 +18,34 @@ import com.vaadin.flow.server.WebBrowser;
 public class MainView extends AppLayout {
 
     private VerticalLayout contentArea;
+    private boolean isMobile;
 
     public MainView() {
-        createHeader();
-        createMenu();
+        WebBrowser browser = VaadinSession.getCurrent().getBrowser();
+        isMobile = browser.isAndroid() || browser.isIPhone();
+
+        // Primero creamos header y menu (header necesita saber isMobile para mostrar/hacer hueco al toggle)
+        HorizontalLayout header = buildHeader();
+        buildMenu();
+
+        // Comportamiento por dispositivo
+        if (isMobile) {
+            // Drawer superpuesto, navbar muestra toggle y header en navbar
+            setPrimarySection(Section.DRAWER);
+            addToNavbar(true, header);   // true -> mostrar botón hamburguesa
+            setDrawerOpened(false);      // cerrado por defecto en móvil
+        } else {
+            // Escritorio: navbar (header) es primaria y ocupa todo el ancho; drawer fijo a la izquierda
+            setPrimarySection(Section.NAVBAR);
+            addToNavbar(header);         // sin toggle, header ocupa todo el ancho
+            setDrawerOpened(true);       // abierto por defecto en escritorio
+        }
+
         createContent();
     }
 
-    private void createHeader() {
+    // Construye el header y lo devuelve para añadirlo después según el dispositivo
+    private HorizontalLayout buildHeader() {
         H1 title = new H1("Almacenes Gallego");
         title.getStyle()
                 .set("margin", "0")
@@ -37,28 +58,30 @@ public class MainView extends AppLayout {
                 .set("font-size", "var(--lumo-font-size-m)")
                 .set("color", "#34495e");
 
-        // 📦 VerticalLayout para colocar título y subtítulo uno debajo del otro
         VerticalLayout titleLayout = new VerticalLayout(title, subtitle);
         titleLayout.setPadding(false);
         titleLayout.setSpacing(false);
         titleLayout.setAlignItems(Alignment.START);
 
-        // 📏 HorizontalLayout para que el header sea una barra completa
         HorizontalLayout header = new HorizontalLayout(titleLayout);
-        header.setAlignItems(Alignment.CENTER);
-        header.setWidthFull();
+        header.setDefaultVerticalComponentAlignment(Alignment.CENTER);
         header.setPadding(true);
         header.setSpacing(true);
+        header.setWidthFull(); // importante: ocupa todo el ancho
         header.getStyle()
                 .set("background-color", "#ecf0f1")
-                .set("box-shadow", "0 2px 4px rgba(0, 0, 0, 0.1)");
+                .set("box-shadow", "0 2px 4px rgba(0, 0, 0, 0.1)")
+                .set("box-sizing", "border-box");
 
-        // ✅ El `true` mantiene el botón hamburguesa visible en móvil
-        addToNavbar(true, header);
+        // En móvil dejamos espacio al icono hamburguesa para que no quede tapado
+        if (isMobile) {
+            header.expand(titleLayout);
+        }
+
+        return header;
     }
 
-
-    private void createMenu() {
+    private void buildMenu() {
         Button stockButton = new Button("Stock", e -> getUI().ifPresent(ui -> ui.navigate(StockLoteView.class)));
         Button subirDocButton = new Button("Subir Documento", e -> getUI().ifPresent(ui -> ui.navigate(SubirDocumentoView.class)));
         Button productosButton = new Button("Productos", e -> getUI().ifPresent(ui -> ui.navigate(ProductoView.class)));
@@ -78,10 +101,7 @@ public class MainView extends AppLayout {
                 .set("height", "100%")
                 .set("border-radius", "0 5px 5px 0");
 
-        // 💡 Cerrar el drawer solo en móvil
-        WebBrowser browser = VaadinSession.getCurrent().getBrowser();
-        boolean isMobile = browser.isAndroid() || browser.isIPhone();
-
+        // En móvil: cerrar drawer al pulsar un item
         if (isMobile) {
             menu.getChildren().forEach(component -> {
                 if (component instanceof Button button) {
