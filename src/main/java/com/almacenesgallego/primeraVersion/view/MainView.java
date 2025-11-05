@@ -24,27 +24,24 @@ public class MainView extends AppLayout {
         WebBrowser browser = VaadinSession.getCurrent().getBrowser();
         isMobile = browser.isAndroid() || browser.isIPhone();
 
-        // Primero creamos header y menu (header necesita saber isMobile para mostrar/hacer hueco al toggle)
+        // Crear header y menú
         HorizontalLayout header = buildHeader();
         buildMenu();
 
-        // Comportamiento por dispositivo
+        // Configuración según dispositivo
         if (isMobile) {
-            // Drawer superpuesto, navbar muestra toggle y header en navbar
             setPrimarySection(Section.DRAWER);
             addToNavbar(true, header);   // true -> mostrar botón hamburguesa
-            setDrawerOpened(false);      // cerrado por defecto en móvil
+            setDrawerOpened(false);
         } else {
-            // Escritorio: navbar (header) es primaria y ocupa todo el ancho; drawer fijo a la izquierda
             setPrimarySection(Section.NAVBAR);
-            addToNavbar(header);         // sin toggle, header ocupa todo el ancho
-            setDrawerOpened(true);       // abierto por defecto en escritorio
+            addToNavbar(header);
+            setDrawerOpened(true);
         }
 
         createContent();
     }
 
-    // Construye el header y lo devuelve para añadirlo después según el dispositivo
     private HorizontalLayout buildHeader() {
         H1 title = new H1("Almacenes Gallego");
         title.getStyle()
@@ -67,15 +64,17 @@ public class MainView extends AppLayout {
         header.setDefaultVerticalComponentAlignment(Alignment.CENTER);
         header.setPadding(true);
         header.setSpacing(true);
-        header.setWidthFull(); // importante: ocupa todo el ancho
+        header.setWidthFull();
         header.getStyle()
                 .set("background-color", "#ecf0f1")
                 .set("box-shadow", "0 2px 4px rgba(0, 0, 0, 0.1)")
                 .set("box-sizing", "border-box");
 
-        // En móvil dejamos espacio al icono hamburguesa para que no quede tapado
         if (isMobile) {
-            header.expand(titleLayout);
+            // Deja espacio para el botón de hamburguesa
+            header.getStyle().set("padding-left", "3.5rem");
+            // Asegura que no tape el botón
+            header.getStyle().set("position", "relative").set("z-index", "0");
         }
 
         return header;
@@ -101,7 +100,6 @@ public class MainView extends AppLayout {
                 .set("height", "100%")
                 .set("border-radius", "0 5px 5px 0");
 
-        // En móvil: cerrar drawer al pulsar un item
         if (isMobile) {
             menu.getChildren().forEach(component -> {
                 if (component instanceof Button button) {
@@ -124,7 +122,14 @@ public class MainView extends AppLayout {
                 .set("font-size", "var(--lumo-font-size-m)")
                 .set("color", "#34495e");
 
-        contentArea.add(welcomeText);
+        // Nuevo: mostrar tipo de dispositivo
+        Span deviceInfo = new Span(isMobile ? "Dispositivo detectado: MÓVIL" : "Dispositivo detectado: ORDENADOR");
+        deviceInfo.getStyle()
+                .set("font-size", "var(--lumo-font-size-s)")
+                .set("color", isMobile ? "green" : "blue")
+                .set("margin-top", "10px");
+
+        contentArea.add(welcomeText, deviceInfo);
 
         setContent(contentArea);
     }
