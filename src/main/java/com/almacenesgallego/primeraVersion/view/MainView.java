@@ -3,14 +3,12 @@ package com.almacenesgallego.primeraVersion.view;
 import com.vaadin.flow.component.applayout.AppLayout;
 import com.vaadin.flow.component.applayout.AppLayout.Section;
 import com.vaadin.flow.component.html.H1;
-import com.vaadin.flow.component.html.H3;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.orderedlayout.FlexComponent;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.button.Button;
-import com.vaadin.flow.router.Route;
-import com.vaadin.flow.component.orderedlayout.FlexComponent.Alignment;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
+import com.vaadin.flow.router.Route;
 import com.vaadin.flow.server.VaadinSession;
 import com.vaadin.flow.server.WebBrowser;
 
@@ -24,17 +22,23 @@ public class MainView extends AppLayout {
         WebBrowser browser = VaadinSession.getCurrent().getBrowser();
         isMobile = browser.isAndroid() || browser.isIPhone();
 
+        // Configurar secciones
+        if (isMobile) {
+            setPrimarySection(Section.DRAWER);
+        } else {
+            setPrimarySection(Section.NAVBAR);
+        }
+
         // Crear header y menú
         HorizontalLayout header = buildHeader();
         buildMenu();
 
-        // Configuración según dispositivo
+        // Añadir header
+        // En móvil => addToNavbar(true, header) para mostrar hamburguesa
         if (isMobile) {
-            setPrimarySection(Section.DRAWER);
-            addToNavbar(true, header);   // true -> mostrar botón hamburguesa
+            addToNavbar(true, header);
             setDrawerOpened(false);
         } else {
-            setPrimarySection(Section.NAVBAR);
             addToNavbar(header);
             setDrawerOpened(true);
         }
@@ -49,32 +53,18 @@ public class MainView extends AppLayout {
                 .set("font-size", "var(--lumo-font-size-l)")
                 .set("color", "#2c3e50");
 
-        H3 subtitle = new H3("Gestión de Stock y Documentos");
-        subtitle.getStyle()
-                .set("margin", "0")
-                .set("font-size", "var(--lumo-font-size-m)")
-                .set("color", "#34495e");
-
-        VerticalLayout titleLayout = new VerticalLayout(title, subtitle);
-        titleLayout.setPadding(false);
-        titleLayout.setSpacing(false);
-        titleLayout.setAlignItems(Alignment.START);
-
-        HorizontalLayout header = new HorizontalLayout(titleLayout);
-        header.setDefaultVerticalComponentAlignment(Alignment.CENTER);
-        header.setPadding(true);
-        header.setSpacing(true);
+        HorizontalLayout header = new HorizontalLayout(title);
+        header.setDefaultVerticalComponentAlignment(FlexComponent.Alignment.CENTER);
         header.setWidthFull();
         header.getStyle()
                 .set("background-color", "#ecf0f1")
                 .set("box-shadow", "0 2px 4px rgba(0, 0, 0, 0.1)")
+                .set("padding", "0.5rem 1rem")
                 .set("box-sizing", "border-box");
 
         if (isMobile) {
-            // Deja espacio para el botón de hamburguesa
+            // Deja hueco a la izquierda para el botón hamburguesa
             header.getStyle().set("padding-left", "3.5rem");
-            // Asegura que no tape el botón
-            header.getStyle().set("position", "relative").set("z-index", "0");
         }
 
         return header;
@@ -86,19 +76,13 @@ public class MainView extends AppLayout {
         Button productosButton = new Button("Productos", e -> getUI().ifPresent(ui -> ui.navigate(ProductoView.class)));
         Button proveedorButton = new Button("Proveedores", e -> getUI().ifPresent(ui -> ui.navigate(ProveedorView.class)));
 
-        stockButton.getStyle().set("width", "100%").set("margin-bottom", "10px");
-        subirDocButton.getStyle().set("width", "100%");
-        productosButton.getStyle().set("width", "100%");
-        proveedorButton.getStyle().set("width", "100%");
-
         VerticalLayout menu = new VerticalLayout(stockButton, subirDocButton, productosButton, proveedorButton);
         menu.setPadding(true);
         menu.setSpacing(true);
         menu.setWidth("200px");
         menu.getStyle()
                 .set("background-color", "#ecf0f1")
-                .set("height", "100%")
-                .set("border-radius", "0 5px 5px 0");
+                .set("height", "100%");
 
         if (isMobile) {
             menu.getChildren().forEach(component -> {
@@ -122,7 +106,6 @@ public class MainView extends AppLayout {
                 .set("font-size", "var(--lumo-font-size-m)")
                 .set("color", "#34495e");
 
-        // Nuevo: mostrar tipo de dispositivo
         Span deviceInfo = new Span(isMobile ? "Dispositivo detectado: MÓVIL" : "Dispositivo detectado: ORDENADOR");
         deviceInfo.getStyle()
                 .set("font-size", "var(--lumo-font-size-s)")
